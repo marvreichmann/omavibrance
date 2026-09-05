@@ -9,8 +9,8 @@ import "Model.js" as Model
 // surfaces on a three-monitor setup stay in agreement.
 Panel {
   id: root
-  moduleName: "com.github.marv.omavibrance"
-  ipcTarget: "com.github.marv.omavibrance"
+  moduleName: "com.github.marvreichmann.omavibrance"
+  ipcTarget: "com.github.marvreichmann.omavibrance"
 
   property var anchorItem: null
 
@@ -23,7 +23,7 @@ Panel {
   // `panel` entry point. This one is nested inside the bar widget instead, so
   // it reaches the singleton the way any bar-hosted component has to: through
   // the bar's shell reference.
-  readonly property var service: bar && bar.shell ? bar.shell.serviceFor("com.github.marv.omavibrance") : null
+  readonly property var service: bar && bar.shell ? bar.shell.serviceFor("com.github.marvreichmann.omavibrance") : null
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar && bar.urgent !== undefined ? bar.urgent : Color.urgent

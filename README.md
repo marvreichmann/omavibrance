@@ -24,7 +24,7 @@ bar, using [`nvibrant`](https://github.com/Tremeschin/nvibrant).
 
 ## Installation
 
-Copy this directory to `~/.config/omarchy/plugins/com.github.marv.omavibrance/`,
+Copy this directory to `~/.config/omarchy/plugins/com.github.marvreichmann.omavibrance/`,
 then add the **Omavibrance** widget to your bar. Adding the widget is what
 enables the plugin, which in turn starts its service.
 

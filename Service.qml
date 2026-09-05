@@ -25,7 +25,7 @@ Item {
   property var manifest: null
   property string omarchyPath: ""
 
-  readonly property string pluginId: "com.github.marv.omavibrance"
+  readonly property string pluginId: "com.github.marvreichmann.omavibrance"
   readonly property string stateDir: (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state") + "/omarchy"
   readonly property string statePath: stateDir + "/omavibrance.json"
 

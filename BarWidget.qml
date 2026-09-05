@@ -8,7 +8,7 @@ import qs.Ui
 // the service, which is a single instance for the whole shell.
 BarWidget {
   id: root
-  moduleName: "com.github.marv.omavibrance"
+  moduleName: "com.github.marvreichmann.omavibrance"
 
   // The bar injects `bar`, `moduleName` and `settings` — nothing else. A nested
   // panel gets none of them unless we hand them over, and `anchorItem` is what

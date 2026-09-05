@@ -13,7 +13,7 @@
 
 ```sh
 cp -a manifest.json *.qml *.js README.md LICENSE assets \
-  ~/.config/omarchy/plugins/com.github.marv.omavibrance/
+  ~/.config/omarchy/plugins/com.github.marvreichmann.omavibrance/
 ```
 
 The shell watches local plugins and reloads them on change, but a failed load
@@ -28,7 +28,7 @@ journalctl --user --since -20s | grep omavibrance
 Open the panel without touching the bar:
 
 ```sh
-omarchy-shell com.github.marv.omavibrance open   # also: close, toggle
+omarchy-shell com.github.marvreichmann.omavibrance open   # also: close, toggle
 ```
 
 ## Shell APIs this plugin relies on
