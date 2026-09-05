@@ -2,17 +2,17 @@
 
 ## Rules
 
-1. **Primary project directory**: `/home/marv/Projects/omavibrance`. This will
-   eventually be a Git repository.
-2. **Workflow**: develop here, then copy the **entire** contents to
-   `~/.config/omarchy/plugins/<plugin_id>` to test. The destination folder name
-   **must** match the `id` in `manifest.json`.
-3. **Reference**: <https://plugins.omarchy.org/develop.html>.
+1. **Develop in this repository**, not in the installed copy.
+2. **Workflow**: to test, copy the **entire** contents to
+   `~/.config/omarchy/plugins/<plugin_id>`. The destination folder name **must**
+   match the `id` in `manifest.json`.
+3. **Reference**: <https://plugins.omarchy.org/develop.html>, and
+   <https://plugins.omarchy.org/publish.html> before releasing.
 
 ## Test loop
 
 ```sh
-cp -a manifest.json *.qml *.js README.md LICENSE assets \
+cp -a manifest.json *.qml *.js README.md LICENSE preview.png assets \
   ~/.config/omarchy/plugins/com.github.marvreichmann.omavibrance/
 ```
 
@@ -97,7 +97,7 @@ nothing here can synthesize a mouse click:
 
 ```sh
 mkdir -p /tmp/qstest/omavibrance-test && cd /tmp/qstest
-cp ~/Projects/omavibrance/{Service.qml,Model.js} omavibrance-test/
+cp "$OLDPWD"/{Service.qml,Model.js} omavibrance-test/   # from the repo root
 # write a harness shell.qml that instantiates Service and calls its functions
 XDG_STATE_HOME=$PWD/state qs -p omavibrance-test/shell.qml
 ```
@@ -105,6 +105,22 @@ XDG_STATE_HOME=$PWD/state qs -p omavibrance-test/shell.qml
 Point `XDG_STATE_HOME` at a scratch directory or the harness will overwrite the
 real state file. Note that the harness drives real hardware: it changes actual
 vibrance, so end it on `resetAll()`.
+
+## Before publishing
+
+`omarchy plugin validate <folder>` mirrors the checks the shell itself enforces
+— schemaVersion, required fields, safe relative entry points that exist, an
+entry point for every declared kind, no symlinks, no reserved id. It exits 0
+silently on success. It does **not** check the things the marketplace listing
+needs, so verify those by hand:
+
+- `author`, `description` and `license` present in `manifest.json`, and the
+  `license` value matching what `LICENSE` actually says.
+- `README.md` and `LICENSE` at the repository root.
+- `preview.png` at the repository root — every published plugin ships one and
+  the store optimizes it automatically. No fixed dimensions; existing ones run
+  from 960x540 to 2560x1600.
+- `homepage` pointing at the public repository.
 
 ## Manual checks
 

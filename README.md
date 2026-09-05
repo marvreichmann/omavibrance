@@ -38,9 +38,18 @@ bar, using [`nvibrant`](https://github.com/Tremeschin/nvibrant).
 
 ## Installation
 
-Copy this directory to `~/.config/omarchy/plugins/com.github.marvreichmann.omavibrance/`,
-then add the **Omavibrance** widget to your bar. Adding the widget is what
+```sh
+omarchy plugin add https://github.com/marvreichmann/omavibrance --enable
+```
+
+Then add the **Omavibrance** widget to your bar. Adding the widget is what
 enables the plugin, which in turn starts its service.
+
+To install by hand instead, copy this directory to
+`~/.config/omarchy/plugins/com.github.marvreichmann.omavibrance/` — the folder
+name must match the `id` in `manifest.json`.
+
+To remove it: `omarchy plugin remove com.github.marvreichmann.omavibrance`.
 
 ## Notes on `nvibrant`
 

@@ -3,7 +3,7 @@
   "id": "com.github.marvreichmann.omavibrance",
   "name": "Omavibrance",
   "version": "0.7.0",
-  "author": "Marv",
+  "author": "Marvin Reichmann",
   "license": "MIT",
   "description": "Control digital vibrance for all connected displays using nvibrant.",
   "kinds": [
@@ -18,7 +18,12 @@
     "displayName": "Omavibrance",
     "description": "Adjust digital vibrance for displays.",
     "category": "Display",
-    "aliases": ["vibrance", "saturation", "nvibrant", "color"],
+    "aliases": [
+      "vibrance",
+      "saturation",
+      "nvibrant",
+      "color"
+    ],
     "allowMultiple": false,
     "defaultSection": "right"
   }
