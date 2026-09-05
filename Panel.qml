@@ -38,12 +38,18 @@ Panel {
   property int editingIndex: -1
   property int numericIndex: -1
 
-  // How far each display card reaches outside the content column. The cards are
-  // shifted out by exactly their own horizontal inset, so what is *inside* them
-  // — the monitor glyph, the name, the slider — starts on the same vertical
-  // line as the hero's icon and title. Without it every row sits one card
-  // padding further right than the header and the panel reads as crooked.
-  readonly property int rowBleed: Style.spacing.rowPaddingX
+  // Whether the install instructions under the missing-binary warning are open.
+  property bool helpOpen: false
+
+  // The card's inner padding, and therefore the amount the header and footer
+  // are inset by so that *their* contents share the rows' left edge.
+  //
+  // The cards themselves span the full content column, which puts their border
+  // on the same line as the hero's toggle and the footer buttons — the panel's
+  // outer edge — while everything that reads as content sits one inset inside
+  // it. Bleeding the cards outward instead would align the contents but leave
+  // the boxes sticking out past the controls above and below them.
+  readonly property int rowInset: Style.spacing.rowPaddingX
 
   // The leading icon column, shared by the hero and every row so their glyphs
   // and their text both start on the same line. The gap matches the one
@@ -95,12 +101,10 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    // The hero's icon and title sit right against this inset, so the popup's
-    // default padding left them looking pinned to the edge. It also has to
-    // leave room for the display cards, which bleed outward by `rowBleed` so
-    // that their contents line up with the header rather than sitting a card
-    // padding further in.
-    padding: Style.space(24)
+    // One margin on every side. The card borders, the hero's toggle and the
+    // footer buttons all sit on the content column's edge, so this is equally
+    // the gap to the right of the buttons and the gap below them.
+    padding: Style.space(16)
     contentWidth: card.fittedContentWidth(Style.space(420))
     contentHeight: card.fittedContentHeight(content.implicitHeight)
 
@@ -123,7 +127,11 @@ Panel {
 
       PanelHero {
         id: hero
-        width: parent.width
+        // Inset on the left only: the icon and labels line up with what is
+        // inside the cards, while the trailing switch stays out on the content
+        // edge with the card borders and the footer buttons.
+        x: root.rowInset
+        width: parent.width - root.rowInset
         title: "Digital Vibrance"
         meta: root.heroMeta
         foreground: root.foreground
@@ -149,6 +157,11 @@ Panel {
             visible: root.service && !root.service.nvibrantMissing
             checked: !root.bypassed
             foreground: hero.foreground
+            // The cursor ring pads the item six pixels around the visible
+            // track, which would leave the switch floating short of the edge
+            // every other control lines up on. Nothing here drives the panel by
+            // keyboard cursor, so the ring costs nothing to drop.
+            cursorRing: false
             onToggled: if (root.service) root.service.setBypassed(root.bypassed ? false : true)
 
             PanelToolTip {
@@ -165,7 +178,8 @@ Panel {
       // ------------------------------------------------------------ errors
 
       Text {
-        width: parent.width
+        x: root.rowInset
+        width: parent.width - root.rowInset
         visible: !root.service
         text: "Enable the omavibrance service by adding the widget to your bar in shell.json."
         color: root.urgent
@@ -175,19 +189,77 @@ Panel {
         textFormat: Text.PlainText
       }
 
-      Text {
+      // Missing binary: say so, and put the fix one click away rather than
+      // sending the reader off to find the README.
+      Column {
         width: parent.width
         visible: root.service ? root.service.nvibrantMissing : false
-        text: "nvibrant is not installed. Install it to control vibrance."
-        color: root.urgent
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        wrapMode: Text.WordWrap
-        textFormat: Text.PlainText
+        spacing: Style.spacing.sm
+
+        Item {
+          width: parent.width
+          implicitHeight: Math.max(missingText.implicitHeight, helpButton.implicitHeight)
+
+          Text {
+            id: missingText
+            anchors.left: parent.left
+            anchors.leftMargin: root.rowInset
+            anchors.right: helpButton.left
+            anchors.rightMargin: Style.spacing.sm
+            anchors.verticalCenter: parent.verticalCenter
+            text: "nvibrant is not installed."
+            color: root.urgent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.WordWrap
+            textFormat: Text.PlainText
+          }
+
+          PanelActionButton {
+            id: helpButton
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            // U+F0625 nf-md-help-circle-outline
+            iconText: "\udb81\ude25"
+            tooltipText: root.helpOpen ? "Hide" : "How to install it"
+            foreground: root.helpOpen ? Color.accent : root.foreground
+            fontFamily: root.fontFamily
+            fontSize: Style.font.bodySmall
+            onClicked: root.helpOpen = !root.helpOpen
+          }
+        }
+
+        BorderSurface {
+          visible: root.helpOpen
+          width: parent.width
+          implicitHeight: helpText.implicitHeight + Style.spacing.xxl
+          height: implicitHeight
+          radius: Style.cornerRadius
+          color: Style.normalFillFor(root.foreground, Color.accent)
+          borderSpec: Border.controlSpec("normal", root.foreground, Color.accent)
+
+          Text {
+            id: helpText
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: root.rowInset
+            anchors.rightMargin: root.rowInset
+            text: "On Arch, from the AUR:\n    yay -S nvibrant-bin\n\nAnywhere else:\n    pipx install nvibrant\n\n"
+              + "It drives /dev/nvidia-modeset directly, so the kernel needs nvidia_drm.modeset=1.\n"
+              + "Reopen this panel once it is on your PATH."
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+            textFormat: Text.PlainText
+          }
+        }
       }
 
       Text {
-        width: parent.width
+        x: root.rowInset
+        width: parent.width - root.rowInset
         visible: root.service ? (!root.service.nvibrantMissing && root.service.lastError !== "") : false
         text: root.service ? root.service.lastError : ""
         color: root.urgent
@@ -198,7 +270,8 @@ Panel {
       }
 
       Text {
-        width: parent.width
+        x: root.rowInset
+        width: parent.width - root.rowInset
         visible: root.service ? (!root.service.nvibrantMissing && root.displays.length === 0) : false
         text: "No connected displays reported by nvibrant."
         color: root.dim
@@ -237,21 +310,18 @@ Panel {
             readonly property bool identifying: root.service ? root.service.identifyIndex === displayIndex : false
             readonly property bool hot: hover.hovered || editing || numeric || identifying
 
-            // Reach out past the content column by the bleed, then pad back in
-            // by the same amount so the row's contents land on the header's
-            // line. The padding is measured off the border rather than fixed,
-            // because the border width can differ between the normal, hover and
-            // selected specs — folding that difference into the padding keeps
-            // the contents from shifting sideways as the row lights up.
-            x: -root.rowBleed
-            width: parent.width + root.rowBleed * 2
+            width: parent.width
             implicitHeight: rowColumn.implicitHeight + contentTopInset + contentBottomInset
             height: implicitHeight
             radius: Style.cornerRadius
             topPadding: Style.spacing.rowPaddingX
             bottomPadding: Style.spacing.rowPaddingX
-            leftPadding: Math.max(0, root.rowBleed - borderLeft)
-            rightPadding: Math.max(0, root.rowBleed - borderRight)
+            // Measured off the border rather than fixed, because the normal,
+            // hover and selected specs can differ in border width — folding
+            // that difference into the padding keeps the contents from shifting
+            // sideways as the row lights up.
+            leftPadding: Math.max(0, root.rowInset - borderLeft)
+            rightPadding: Math.max(0, root.rowInset - borderRight)
             // A card that lifts on hover, so three rows read as three objects
             // rather than one wall of text. An identifying row stays lit for as
             // long as its display is flashing.
@@ -586,7 +656,10 @@ Panel {
             fontFamily: root.fontFamily
             fontSize: Style.font.bodySmall
             tooltipText: "Return to the saved values"
-            enabled: root.service ? root.service.hasSnapshot : false
+            // A snapshot can outlive the binary that applied it, so this needs
+            // the same guard as the rest: with nvibrant gone the click would be
+            // swallowed and the button would just look broken.
+            enabled: root.service ? (root.service.hasSnapshot && !root.service.nvibrantMissing) : false
             opacity: enabled ? 1.0 : 0.4
             onClicked: if (root.service) root.service.restoreSnapshot()
           }

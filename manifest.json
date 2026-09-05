@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "com.github.marvreichmann.omavibrance",
   "name": "Omavibrance",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "author": "Marv",
   "license": "MIT",
   "description": "Control digital vibrance for all connected displays using nvibrant.",

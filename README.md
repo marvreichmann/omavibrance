@@ -25,7 +25,8 @@ bar, using [`nvibrant`](https://github.com/Tremeschin/nvibrant).
   the shell restarts, since `nvibrant` has no way to read back what is set.
 - Right-click a slider to return that display to neutral; **Reset** neutralizes
   all of them.
-- Warns in the panel if `nvibrant` is missing or an invocation fails.
+- Warns in the panel if `nvibrant` is missing or an invocation fails; the
+  missing-binary warning carries a help button with the install commands.
 
 ## Prerequisites
 
