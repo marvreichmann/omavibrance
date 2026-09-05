@@ -116,7 +116,17 @@ vibrance, so end it on `resetAll()`.
 - Identify flashes exactly one display six times and leaves it on its stored
   value. Closing the panel mid-pulse stops it.
 - Rename persists, survives a restart, and an empty name falls back to the EDID
-  label.
+  label. Enter and the check commit; Escape and the cross discard. There is
+  deliberately no commit-on-focus-loss: clicking the discard button can take
+  focus off the field before its click handler runs, so a focus-loss commit
+  would save the very edit being thrown away.
+- The keyboard button reveals the numeric field in place of the percentage
+  reading; clicking it again hides it.
+- The neutral mark must clear the *knob*, not just the track — at exactly 0% the
+  knob parks dead centre and a shorter mark vanishes under it.
+- The header switch bypasses: every display goes neutral, stored values and
+  slider positions do not move, and turning it back on restores them exactly.
+  An identify pulse outranks the bypass.
 - Save then drift then Restore returns the exact saved values. Restore is
   disabled until a snapshot exists.
 - Right-click on a slider neutralizes that display; Reset neutralizes all and

@@ -52,6 +52,11 @@ Item {
   property var monitors: []
   property var monitorsByIndex: ({})
 
+  // Master off switch. Drives every display to neutral without touching the
+  // stored values, so the panel keeps showing — and lets you keep editing —
+  // what vibrance will return to when it is switched back on.
+  property bool bypassed: false
+
   property bool nvibrantMissing: false
   property string lastError: ""
   readonly property bool busy: applyProc.running
@@ -116,8 +121,19 @@ Item {
   property int identifyIndex: -1
   property int identifyValue: 0
 
+  // An identify pulse outranks the bypass: telling two identical monitors apart
+  // is exactly as useful with vibrance switched off as with it on.
   function effectiveValue(index) {
-    return (identifyIndex === index) ? identifyValue : valueFor(index)
+    if (identifyIndex === index) return identifyValue
+    if (bypassed) return 0
+    return valueFor(index)
+  }
+
+  function setBypassed(value) {
+    if (bypassed === value) return
+    bypassed = value
+    saveTimer.restart()
+    apply()
   }
 
   function apply() {
@@ -382,6 +398,7 @@ Item {
           for (var j = 0; j < parsed.saved.length; j++) snap.push(Model.clampRaw(parsed.saved[j]))
           root.saved = snap
         }
+        if (typeof parsed.bypassed === "boolean") root.bypassed = parsed.bypassed
         if (parsed.names && typeof parsed.names === "object") {
           var n = ({})
           for (var k in parsed.names) n[String(k)] = String(parsed.names[k])
@@ -402,7 +419,8 @@ Item {
       version: 2,
       values: root.values,
       saved: root.saved,
-      names: root.names
+      names: root.names,
+      bypassed: root.bypassed
     }, null, 2) + "\n")
   }
 

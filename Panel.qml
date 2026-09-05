@@ -31,15 +31,18 @@ Panel {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   readonly property var displays: service ? service.connectedDisplays : []
+  readonly property bool bypassed: service ? service.bypassed : false
 
-  // Which row has its name field open. Only one at a time, so the key catcher
-  // can be blocked while it is.
+  // Which row has its name field open, and which has its numeric field open.
+  // One of each at most, so the key catcher knows when to stand down.
   property int editingIndex: -1
+  property int numericIndex: -1
 
   // The hero's status line: what the panel is driving right now.
   readonly property string heroMeta: {
     if (!service) return "Service unavailable"
     if (service.nvibrantMissing) return "nvibrant not found"
+    if (service.bypassed) return "Bypassed · vibrance off"
     var n = displays.length
     var count = n === 1 ? "1 display" : n + " displays"
     return service.driverVersion !== "" ? count + " · driver " + service.driverVersion : count
@@ -50,6 +53,7 @@ Panel {
   onOpenedChanged: {
     if (!opened) {
       editingIndex = -1
+      numericIndex = -1
       // A pulse left running behind a closed panel would keep flashing a
       // monitor with no visible way to stop it.
       if (service && service.identifyIndex >= 0) service.stopIdentify()
@@ -74,15 +78,18 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
+    // The hero's icon and title sit right against this inset, so the popup's
+    // default padding left them looking pinned to the edge.
+    padding: Style.spacing.panelPadding
     contentWidth: card.fittedContentWidth(Style.space(420))
     contentHeight: card.fittedContentHeight(content.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      // While a name field is open it must receive the keystrokes itself,
-      // including the Escape that closes it.
-      blocked: root.editingIndex >= 0
+      // While a field is open it must receive the keystrokes itself, including
+      // the Escape that dismisses it.
+      blocked: root.editingIndex >= 0 || root.numericIndex >= 0
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
     }
@@ -95,12 +102,13 @@ Panel {
       // ------------------------------------------------------------- hero
 
       PanelHero {
+        id: hero
         width: parent.width
         title: "Digital Vibrance"
         meta: root.heroMeta
         foreground: root.foreground
         fontFamily: root.fontFamily
-        iconOpacity: (root.service && !root.service.nvibrantMissing) ? 1.0 : 0.5
+        iconOpacity: (root.service && !root.service.nvibrantMissing && !root.bypassed) ? 1.0 : 0.5
 
         iconComponent: Component {
           OpticalGlyph {
@@ -108,6 +116,24 @@ Panel {
             text: "\udb80\udf01"
             fontSize: Style.font.display
             color: root.foreground
+          }
+        }
+
+        // Master switch. Off drives every display to neutral while leaving the
+        // stored values — and this panel's sliders — exactly where they are.
+        trailingControl: Component {
+          ToggleSwitch {
+            id: powerSwitch
+            visible: root.service && !root.service.nvibrantMissing
+            checked: !root.bypassed
+            foreground: hero.foreground
+            onToggled: if (root.service) root.service.setBypassed(root.bypassed ? false : true)
+
+            PanelToolTip {
+              visible: powerSwitch.containsMouse
+              text: root.bypassed ? "Turn vibrance on" : "Bypass — set every display neutral"
+              fontFamily: hero.fontFamily
+            }
           }
         }
       }
@@ -165,6 +191,14 @@ Panel {
       Column {
         width: parent.width
         spacing: Style.spacing.sm
+        // Bypassed displays are still editable — you set up where vibrance
+        // will land before switching it back on — but they are not in effect,
+        // and the panel should not pretend otherwise.
+        opacity: root.bypassed ? 0.55 : 1.0
+
+        Behavior on opacity {
+          NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+        }
 
         Repeater {
           model: root.displays
@@ -177,8 +211,9 @@ Panel {
             readonly property var monitor: root.service ? root.service.monitorFor(displayIndex) : null
             readonly property string customName: root.service ? root.service.nameFor(displayIndex) : ""
             readonly property bool editing: root.editingIndex === displayIndex
+            readonly property bool numeric: root.numericIndex === displayIndex
             readonly property bool identifying: root.service ? root.service.identifyIndex === displayIndex : false
-            readonly property bool hot: hover.hovered || editing || identifying
+            readonly property bool hot: hover.hovered || editing || numeric || identifying
 
             width: parent.width
             implicitHeight: rowColumn.implicitHeight + contentTopInset + contentBottomInset
@@ -222,10 +257,10 @@ Panel {
               anchors.rightMargin: rowCard.contentRightInset
               spacing: Style.spacing.xs
 
-              // ---- name + value ----
+              // ---- name + reading ----
               Item {
                 width: parent.width
-                implicitHeight: Math.max(nameStack.implicitHeight, field.implicitHeight)
+                implicitHeight: Math.max(nameStack.implicitHeight, valueStack.implicitHeight)
 
                 OpticalGlyph {
                   id: rowIcon
@@ -244,7 +279,7 @@ Panel {
                   id: nameStack
                   anchors.left: rowIcon.right
                   anchors.leftMargin: Style.spacing.lg
-                  anchors.right: field.left
+                  anchors.right: valueStack.left
                   anchors.rightMargin: Style.spacing.controlGap
                   anchors.verticalCenter: parent.verticalCenter
                   implicitHeight: rowCard.editing ? nameField.implicitHeight : nameLabel.implicitHeight
@@ -275,35 +310,66 @@ Panel {
                       root.editingIndex = -1
                     }
 
+                    // Clearing editingIndex first makes `rowCard.editing` false,
+                    // so the focus-loss handler below sees an edit that is no
+                    // longer in progress and drops the text instead of saving it.
+                    function cancel() { root.editingIndex = -1 }
+
                     onAccepted: commit()
                     Keys.onEscapePressed: function(event) {
-                      root.editingIndex = -1
+                      cancel()
                       event.accepted = true
                     }
-                    // Clicking elsewhere in the panel is a commit, not a cancel:
-                    // losing the text because the popup stole focus would be a
-                    // surprise.
-                    onActiveFocusChanged: if (!activeFocus && rowCard.editing) commit()
+
+                    // No commit-on-focus-loss. Clicking the discard button can
+                    // take focus off this field before its click handler runs,
+                    // so a focus-loss commit would save the very edit the user
+                    // just asked to throw away. Only the four explicit exits —
+                    // Enter, Escape, and the two buttons — decide the outcome.
                   }
                 }
 
-                NumberField {
-                  id: field
+                // The reading, right-aligned where the eye lands. The spin box
+                // is the same value behind a button, so the resting row shows a
+                // number rather than a control.
+                Item {
+                  id: valueStack
                   anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
-                  from: -100
-                  to: 100
-                  stepSize: 5
-                  fieldWidth: Style.space(74)
-                  foreground: root.foreground
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.bodySmall
-                  // Follow the knob while it is moving; the service only catches
-                  // up once nvibrant has run.
-                  value: slider.dragging
-                    ? Math.round(slider.liveValue)
-                    : (root.service ? root.service.percentFor(rowCard.displayIndex) : 0)
-                  onModified: function(value) { root.applyPercent(rowCard.displayIndex, value) }
+                  implicitWidth: rowCard.numeric ? numberField.implicitWidth : percentLabel.implicitWidth
+                  implicitHeight: rowCard.numeric ? numberField.implicitHeight : percentLabel.implicitHeight
+
+                  Text {
+                    id: percentLabel
+                    visible: !rowCard.numeric
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: (slider.dragging
+                      ? Math.round(slider.liveValue)
+                      : (root.service ? root.service.percentFor(rowCard.displayIndex) : 0)) + "%"
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    textFormat: Text.PlainText
+                  }
+
+                  NumberField {
+                    id: numberField
+                    visible: rowCard.numeric
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    from: -100
+                    to: 100
+                    stepSize: 5
+                    fieldWidth: Style.space(74)
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.bodySmall
+                    value: slider.dragging
+                      ? Math.round(slider.liveValue)
+                      : (root.service ? root.service.percentFor(rowCard.displayIndex) : 0)
+                    onModified: function(value) { root.applyPercent(rowCard.displayIndex, value) }
+                  }
                 }
               }
 
@@ -341,7 +407,33 @@ Panel {
                     NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
                   }
 
+                  // While renaming, the row's actions become the two answers to
+                  // the question on screen. Escape works too, but a rename with
+                  // no visible way out is a trap.
                   PanelActionButton {
+                    visible: rowCard.editing
+                    // U+F012C nf-md-check
+                    iconText: "\udb80\udd2c"
+                    tooltipText: "Save name"
+                    foreground: Color.accent
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.bodySmall
+                    onClicked: nameField.commit()
+                  }
+
+                  PanelActionButton {
+                    visible: rowCard.editing
+                    // U+F0156 nf-md-close
+                    iconText: "\udb80\udd56"
+                    tooltipText: "Discard"
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.bodySmall
+                    onClicked: nameField.cancel()
+                  }
+
+                  PanelActionButton {
+                    visible: !rowCard.editing
                     // U+F0208 nf-md-eye — flash this display so it can be told
                     // apart from the others.
                     iconText: "\udb80\ude08"
@@ -357,6 +449,7 @@ Panel {
                   }
 
                   PanelActionButton {
+                    visible: !rowCard.editing
                     // U+F03EB nf-md-pencil
                     iconText: "\udb80\udfeb"
                     tooltipText: "Rename"
@@ -364,35 +457,67 @@ Panel {
                     fontFamily: root.fontFamily
                     fontSize: Style.font.bodySmall
                     onClicked: {
+                      root.numericIndex = -1
                       nameField.text = rowCard.customName
                       root.editingIndex = rowCard.displayIndex
                       nameField.forceActiveFocus()
                       nameField.selectAll()
                     }
                   }
+
+                  PanelActionButton {
+                    visible: !rowCard.editing
+                    // U+F030C nf-md-keyboard \u2014 "type it in", which reads more
+                    // clearly at this size than any of the numeric glyphs.
+                    iconText: "\udb80\udf0c"
+                    tooltipText: rowCard.numeric ? "Hide the value box" : "Type an exact value"
+                    foreground: rowCard.numeric ? Color.accent : root.foreground
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.bodySmall
+                    onClicked: root.numericIndex = rowCard.numeric ? -1 : rowCard.displayIndex
+                  }
                 }
               }
 
-              // ---- slider, full width ----
-              PanelSlider {
-                id: slider
+              // ---- slider, full width, with a neutral mark ----
+              Item {
                 width: parent.width
-                bar: root.bar
-                minimum: -100
-                maximum: 100
-                // One percent per wheel notch, no snapping: the track is a
-                // continuous range, not a set of stops.
-                step: 1
-                integer: true
-                value: root.service ? root.service.percentFor(rowCard.displayIndex) : 0
+                implicitHeight: slider.implicitHeight
 
-                onMoved: throttle.restart()
-                onReleased: function(value) {
-                  throttle.stop()
-                  root.applyPercent(rowCard.displayIndex, value)
+                // Sits under the slider so the track hides its middle and the
+                // knob never collides with it. It has to clear the knob, not
+                // just the track: at exactly 0% the knob parks dead centre, and
+                // a mark only as tall as the knob disappears underneath it. The
+                // track spans this item's full width, so the item's centre is
+                // exactly the neutral position.
+                Rectangle {
+                  anchors.centerIn: parent
+                  width: Math.max(1, Style.space(2))
+                  height: slider.knobSize + Style.space(12)
+                  radius: width / 2
+                  color: root.dim
                 }
-                // Right-click a slider to return that display to neutral.
-                onRightClicked: root.applyPercent(rowCard.displayIndex, 0)
+
+                PanelSlider {
+                  id: slider
+                  anchors.fill: parent
+                  bar: root.bar
+                  minimum: -100
+                  maximum: 100
+                  // One percent per wheel notch, no snapping: the track is a
+                  // continuous range, not a set of stops.
+                  step: 1
+                  integer: true
+                  value: root.service ? root.service.percentFor(rowCard.displayIndex) : 0
+
+                  onMoved: throttle.restart()
+                  onReleased: function(value) {
+                    throttle.stop()
+                    root.applyPercent(rowCard.displayIndex, value)
+                  }
+                  // Right-click a slider to return that display to neutral.
+                  onRightClicked: root.applyPercent(rowCard.displayIndex, 0)
+                }
               }
             }
           }

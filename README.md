@@ -8,13 +8,18 @@ bar, using [`nvibrant`](https://github.com/Tremeschin/nvibrant).
 ## Features
 
 - One card per connected display, each with a full-width continuous slider
-  **and** a numeric field, from -100% (grayscale) to +100% (max saturation),
+  marked at neutral, its reading above the track, and an exact numeric field a
+  button away. The scale runs -100% (grayscale) to +100% (max saturation),
   matching how nvidia-settings presents the setting.
+- A master switch in the header **bypasses** vibrance — every display goes
+  neutral while the panel keeps showing, and letting you keep editing, the
+  values it will return to.
 - Displays are named from their EDID (`Odyssey G7`, `DP-3`, serial) and listed
   left to right in the order they sit on your desk.
 - **Identify** flashes one display between grayscale and full saturation, so you
-  can tell which row drives which monitor — and **rename** a row to whatever you
-  actually call it.
+  can tell which row drives which monitor — it works even while bypassed. **Rename**
+  a row to whatever you actually call it; Enter or the check saves, Escape or the
+  cross discards.
 - **Save** pins the current values; **Restore** comes back to them after
   experimenting. Live values are also persisted continuously and re-applied when
   the shell restarts, since `nvibrant` has no way to read back what is set.
