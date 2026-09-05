@@ -6,6 +6,7 @@
   "author": "Marvin Reichmann",
   "license": "MIT",
   "description": "Control digital vibrance for all connected displays using nvibrant.",
+  "homepage": "https://github.com/marvreichmann/omavibrance",
   "kinds": [
     "service",
     "bar-widget"
