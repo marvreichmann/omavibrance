@@ -7,9 +7,9 @@ bar, using [`nvibrant`](https://github.com/Tremeschin/nvibrant).
 
 ## Features
 
-- A continuous slider **and** a numeric field per connected display, from -100%
-  (grayscale) to +100% (max saturation), matching how nvidia-settings presents
-  the setting.
+- One card per connected display, each with a full-width continuous slider
+  **and** a numeric field, from -100% (grayscale) to +100% (max saturation),
+  matching how nvidia-settings presents the setting.
 - Displays are named from their EDID (`Odyssey G7`, `DP-3`, serial) and listed
   left to right in the order they sit on your desk.
 - **Identify** flashes one display between grayscale and full saturation, so you

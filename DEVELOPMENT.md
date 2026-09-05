@@ -53,6 +53,12 @@ Worth knowing, because guessing at them is how the first version broke:
   `PanelSlider`, `PanelKeyCatcher`, `Button`, …) and tokens from `qs.Commons`
   (`Style`, `Color`). Read `/usr/share/omarchy/shell/Ui/` before inventing a
   control.
+- The panel's look is the house style, not a bespoke design. `PanelHero` gives
+  the icon + title + small-caps status header (and a `trailingControl` slot for
+  a `ToggleSwitch`, still unused here); row cards are `BorderSurface` tinted
+  with `Style.normalFillFor` / `hoverFillFor` / `selectedFillFor` and
+  `Border.controlSpec`. The first-party Dropbox and Tailscale panels are the
+  reference implementations.
 
 ## `nvibrant` contract
 
@@ -95,8 +101,14 @@ vibrance, so end it on `resetAll()`.
 
 ## Manual checks
 
-- Panel opens with one row per `Success` display, named from EDID and ordered
-  left to right by desktop position.
+- Panel opens with a hero header reading `<n> displays · driver <version>`, and
+  one card per `Success` display, named from EDID and ordered left to right by
+  desktop position.
+- Hovering a card brightens its fill and border and brings its identify/rename
+  icons to full opacity. Note that `hyprctl dispatch movecursor` alone does not
+  raise a hover — warp twice, a few hundred ms apart, to generate real motion;
+  warping while the popup is open can also dismiss it, so position the cursor
+  first and open afterwards.
 - The slider track is continuous — no notches — and dragging updates the number
   field live and the display within ~25 ms; releasing between throttle ticks
   still lands the final value.

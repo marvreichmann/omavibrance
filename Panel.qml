@@ -4,7 +4,7 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 
-// Vibrance popup: one row per connected display. All state lives in the
+// Vibrance popup: one card per connected display. All state lives in the
 // service — this file only renders it and forwards edits, so the bar surfaces
 // on a multi-monitor setup stay in agreement.
 Panel {
@@ -36,6 +36,15 @@ Panel {
   // can be blocked while it is.
   property int editingIndex: -1
 
+  // The hero's status line: what the panel is driving right now.
+  readonly property string heroMeta: {
+    if (!service) return "Service unavailable"
+    if (service.nvibrantMissing) return "nvibrant not found"
+    var n = displays.length
+    var count = n === 1 ? "1 display" : n + " displays"
+    return service.driverVersion !== "" ? count + " · driver " + service.driverVersion : count
+  }
+
   function openFromHotkey() { root.controller.show() }
 
   onOpenedChanged: {
@@ -65,7 +74,7 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    contentWidth: card.fittedContentWidth(Style.space(400))
+    contentWidth: card.fittedContentWidth(Style.space(420))
     contentHeight: card.fittedContentHeight(content.implicitHeight)
 
     PanelKeyCatcher {
@@ -81,20 +90,36 @@ Panel {
     Column {
       id: content
       width: parent.width
-      spacing: Style.spacing.lg
+      spacing: Style.spacing.xxl
 
-      PanelSectionHeader {
-        text: "DIGITAL VIBRANCE"
+      // ------------------------------------------------------------- hero
+
+      PanelHero {
+        width: parent.width
+        title: "Digital Vibrance"
+        meta: root.heroMeta
         foreground: root.foreground
         fontFamily: root.fontFamily
+        iconOpacity: (root.service && !root.service.nvibrantMissing) ? 1.0 : 0.5
+
+        iconComponent: Component {
+          OpticalGlyph {
+            // U+F0301 nf-md-invert_colors, the same mark as the bar widget.
+            text: "\udb80\udf01"
+            fontSize: Style.font.display
+            color: root.foreground
+          }
+        }
       }
+
+      PanelSeparator { foreground: root.foreground }
 
       // ------------------------------------------------------------ errors
 
       Text {
         width: parent.width
         visible: !root.service
-        text: "Service unavailable — enable the omavibrance service in shell.json."
+        text: "Enable the omavibrance service by adding the widget to your bar in shell.json."
         color: root.urgent
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
@@ -135,152 +160,223 @@ Panel {
         textFormat: Text.PlainText
       }
 
-      // -------------------------------------------------------------- rows
+      // ------------------------------------------------------------- rows
 
-      Repeater {
-        model: root.displays
+      Column {
+        width: parent.width
+        spacing: Style.spacing.sm
 
-        delegate: Item {
-          id: row
-          required property var modelData
+        Repeater {
+          model: root.displays
 
-          readonly property int displayIndex: modelData.index
-          readonly property var monitor: root.service ? root.service.monitorFor(displayIndex) : null
-          readonly property string customName: root.service ? root.service.nameFor(displayIndex) : ""
-          readonly property bool editing: root.editingIndex === displayIndex
-          readonly property bool identifying: root.service ? root.service.identifyIndex === displayIndex : false
+          delegate: BorderSurface {
+            id: rowCard
+            required property var modelData
 
-          width: content.width
-          implicitHeight: rowColumn.implicitHeight
-          height: implicitHeight
+            readonly property int displayIndex: modelData.index
+            readonly property var monitor: root.service ? root.service.monitorFor(displayIndex) : null
+            readonly property string customName: root.service ? root.service.nameFor(displayIndex) : ""
+            readonly property bool editing: root.editingIndex === displayIndex
+            readonly property bool identifying: root.service ? root.service.identifyIndex === displayIndex : false
+            readonly property bool hot: hover.hovered || editing || identifying
 
-          // Dragging a slider fires on every pixel of movement. Each apply is a
-          // process spawn, so the drag is rate-limited here and the final value
-          // is sent unconditionally on release — otherwise a drag that ends
-          // between ticks leaves the display on a stale value.
-          Timer {
-            id: throttle
-            interval: 25
-            repeat: false
-            onTriggered: root.applyPercent(row.displayIndex, slider.liveValue)
-          }
-
-          Column {
-            id: rowColumn
             width: parent.width
-            spacing: Style.spacing.xs
+            implicitHeight: rowColumn.implicitHeight + contentTopInset + contentBottomInset
+            height: implicitHeight
+            radius: Style.cornerRadius
+            padding: Style.spacing.rowPaddingX
+            // A card that lifts on hover, so three rows read as three objects
+            // rather than one wall of text. An identifying row stays lit for as
+            // long as its display is flashing.
+            color: identifying
+              ? Style.selectedFillFor(root.foreground, Color.accent)
+              : (hot ? Style.hoverFillFor(root.foreground, Color.accent)
+                     : Style.normalFillFor(root.foreground, Color.accent))
+            borderSpec: Border.controlSpec(identifying ? "selected" : (hot ? "hover-cursor" : "normal"),
+                                           root.foreground, Color.accent)
 
-            // ---- name line ----
-            Item {
-              width: parent.width
-              implicitHeight: Math.max(nameStack.implicitHeight, rowActions.implicitHeight)
+            Behavior on color {
+              ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+            }
 
+            HoverHandler { id: hover }
+
+            // Dragging a slider fires on every pixel of movement. Each apply is
+            // a process spawn, so the drag is rate-limited here and the final
+            // value is sent unconditionally on release — otherwise a drag that
+            // ends between ticks leaves the display on a stale value.
+            Timer {
+              id: throttle
+              interval: 25
+              repeat: false
+              onTriggered: root.applyPercent(rowCard.displayIndex, slider.liveValue)
+            }
+
+            Column {
+              id: rowColumn
+              anchors.top: parent.top
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.topMargin: rowCard.contentTopInset
+              anchors.leftMargin: rowCard.contentLeftInset
+              anchors.rightMargin: rowCard.contentRightInset
+              spacing: Style.spacing.xs
+
+              // ---- name + value ----
               Item {
-                id: nameStack
-                anchors.left: parent.left
-                anchors.right: rowActions.left
-                anchors.rightMargin: Style.spacing.sm
-                anchors.verticalCenter: parent.verticalCenter
-                implicitHeight: row.editing ? nameField.implicitHeight : nameLabel.implicitHeight
+                width: parent.width
+                implicitHeight: Math.max(nameStack.implicitHeight, field.implicitHeight)
+
+                OpticalGlyph {
+                  id: rowIcon
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.font.icon
+                  height: Style.font.icon
+                  // U+F0379 nf-md-monitor
+                  text: "\udb80\udf79"
+                  fontSize: Style.font.bodySmall
+                  fontFamily: root.fontFamily
+                  color: rowCard.identifying ? Color.accent : root.dim
+                }
+
+                Item {
+                  id: nameStack
+                  anchors.left: rowIcon.right
+                  anchors.leftMargin: Style.spacing.lg
+                  anchors.right: field.left
+                  anchors.rightMargin: Style.spacing.controlGap
+                  anchors.verticalCenter: parent.verticalCenter
+                  implicitHeight: rowCard.editing ? nameField.implicitHeight : nameLabel.implicitHeight
+
+                  Text {
+                    id: nameLabel
+                    visible: !rowCard.editing
+                    width: parent.width
+                    text: Model.displayLabel(rowCard.modelData, rowCard.monitor, rowCard.customName)
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    elide: Text.ElideRight
+                    textFormat: Text.PlainText
+                  }
+
+                  TextField {
+                    id: nameField
+                    visible: rowCard.editing
+                    width: parent.width
+                    foreground: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    placeholderText: rowCard.monitor && rowCard.monitor.model ? rowCard.monitor.model : "Display name"
+
+                    function commit() {
+                      if (root.service) root.service.setName(rowCard.displayIndex, text)
+                      root.editingIndex = -1
+                    }
+
+                    onAccepted: commit()
+                    Keys.onEscapePressed: function(event) {
+                      root.editingIndex = -1
+                      event.accepted = true
+                    }
+                    // Clicking elsewhere in the panel is a commit, not a cancel:
+                    // losing the text because the popup stole focus would be a
+                    // surprise.
+                    onActiveFocusChanged: if (!activeFocus && rowCard.editing) commit()
+                  }
+                }
+
+                NumberField {
+                  id: field
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  from: -100
+                  to: 100
+                  stepSize: 5
+                  fieldWidth: Style.space(74)
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.bodySmall
+                  // Follow the knob while it is moving; the service only catches
+                  // up once nvibrant has run.
+                  value: slider.dragging
+                    ? Math.round(slider.liveValue)
+                    : (root.service ? root.service.percentFor(rowCard.displayIndex) : 0)
+                  onModified: function(value) { root.applyPercent(rowCard.displayIndex, value) }
+                }
+              }
+
+              // ---- detail + actions ----
+              Item {
+                width: parent.width
+                implicitHeight: Math.max(detailText.implicitHeight, rowActions.implicitHeight)
 
                 Text {
-                  id: nameLabel
-                  visible: !row.editing
-                  width: parent.width
-                  text: Model.displayLabel(row.modelData, row.monitor, row.customName)
-                  color: root.foreground
+                  id: detailText
+                  anchors.left: parent.left
+                  anchors.leftMargin: rowIcon.width + Style.spacing.lg
+                  anchors.right: rowActions.left
+                  anchors.rightMargin: Style.spacing.sm
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: Model.displayDetail(rowCard.modelData, rowCard.monitor, rowCard.customName)
+                  color: root.dim
                   font.family: root.fontFamily
-                  font.pixelSize: Style.font.body
+                  font.pixelSize: Style.font.caption
                   elide: Text.ElideRight
                   textFormat: Text.PlainText
                 }
 
-                TextField {
-                  id: nameField
-                  visible: row.editing
-                  width: parent.width
-                  foreground: root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  placeholderText: row.monitor && row.monitor.model ? row.monitor.model : "Display name"
+                Row {
+                  id: rowActions
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Style.spacing.xxs
+                  // Present but recessive until the row is under the cursor, so
+                  // the resting panel stays quiet without hiding the controls
+                  // from anyone looking for them.
+                  opacity: rowCard.hot ? 1.0 : 0.45
 
-                  function commit() {
-                    if (root.service) root.service.setName(row.displayIndex, text)
-                    root.editingIndex = -1
+                  Behavior on opacity {
+                    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
                   }
 
-                  onAccepted: commit()
-                  Keys.onEscapePressed: function(event) {
-                    root.editingIndex = -1
-                    event.accepted = true
+                  PanelActionButton {
+                    // U+F0208 nf-md-eye — flash this display so it can be told
+                    // apart from the others.
+                    iconText: "\udb80\ude08"
+                    tooltipText: rowCard.identifying ? "Stop flashing" : "Flash this display"
+                    foreground: rowCard.identifying ? Color.accent : root.foreground
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.bodySmall
+                    onClicked: {
+                      if (!root.service) return
+                      if (rowCard.identifying) root.service.stopIdentify()
+                      else root.service.identify(rowCard.displayIndex)
+                    }
                   }
-                  // Clicking elsewhere in the panel is a commit, not a cancel:
-                  // losing the text because the popup stole focus would be a
-                  // surprise.
-                  onActiveFocusChanged: if (!activeFocus && row.editing) commit()
-                }
-              }
 
-              Row {
-                id: rowActions
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.spacing.xxs
-
-                PanelActionButton {
-                  // U+F0208 nf-md-eye — flash this display so it can be told
-                  // apart from the others.
-                  iconText: "\udb80\ude08"
-                  tooltipText: row.identifying ? "Identifying…" : "Flash this display"
-                  foreground: row.identifying ? Color.accent : root.dim
-                  hoverColor: root.foreground
-                  fontFamily: root.fontFamily
-                  onClicked: {
-                    if (!root.service) return
-                    if (row.identifying) root.service.stopIdentify()
-                    else root.service.identify(row.displayIndex)
-                  }
-                }
-
-                PanelActionButton {
-                  // U+F03EB nf-md-pencil
-                  iconText: "\udb80\udfeb"
-                  tooltipText: "Rename"
-                  foreground: root.dim
-                  hoverColor: root.foreground
-                  fontFamily: root.fontFamily
-                  onClicked: {
-                    nameField.text = row.customName
-                    root.editingIndex = row.displayIndex
-                    nameField.forceActiveFocus()
-                    nameField.selectAll()
+                  PanelActionButton {
+                    // U+F03EB nf-md-pencil
+                    iconText: "\udb80\udfeb"
+                    tooltipText: "Rename"
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.bodySmall
+                    onClicked: {
+                      nameField.text = rowCard.customName
+                      root.editingIndex = rowCard.displayIndex
+                      nameField.forceActiveFocus()
+                      nameField.selectAll()
+                    }
                   }
                 }
               }
-            }
 
-            // ---- detail line ----
-            Text {
-              width: parent.width
-              text: Model.displayDetail(row.modelData, row.monitor, row.customName)
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              elide: Text.ElideRight
-              textFormat: Text.PlainText
-            }
-
-            // ---- control line ----
-            Item {
-              width: parent.width
-              implicitHeight: Math.max(slider.implicitHeight, field.implicitHeight)
-
+              // ---- slider, full width ----
               PanelSlider {
                 id: slider
-                anchors.left: parent.left
-                anchors.right: field.left
-                anchors.rightMargin: Style.spacing.controlGap
-                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
                 bar: root.bar
                 minimum: -100
                 maximum: 100
@@ -288,42 +384,19 @@ Panel {
                 // continuous range, not a set of stops.
                 step: 1
                 integer: true
-                value: root.service ? root.service.percentFor(row.displayIndex) : 0
+                value: root.service ? root.service.percentFor(rowCard.displayIndex) : 0
 
                 onMoved: throttle.restart()
                 onReleased: function(value) {
                   throttle.stop()
-                  root.applyPercent(row.displayIndex, value)
+                  root.applyPercent(rowCard.displayIndex, value)
                 }
                 // Right-click a slider to return that display to neutral.
-                onRightClicked: root.applyPercent(row.displayIndex, 0)
-              }
-
-              NumberField {
-                id: field
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                from: -100
-                to: 100
-                stepSize: 5
-                fieldWidth: Style.space(78)
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                // Follow the knob while it is moving; the service only catches
-                // up once nvibrant has run.
-                value: slider.dragging
-                  ? Math.round(slider.liveValue)
-                  : (root.service ? root.service.percentFor(row.displayIndex) : 0)
-                onModified: function(value) { root.applyPercent(row.displayIndex, value) }
+                onRightClicked: root.applyPercent(rowCard.displayIndex, 0)
               }
             }
           }
         }
-      }
-
-      PanelSeparator {
-        visible: root.displays.length > 0
-        foreground: root.foreground
       }
 
       // ------------------------------------------------------------ footer
@@ -331,17 +404,6 @@ Panel {
       Item {
         width: parent.width
         implicitHeight: footerRow.implicitHeight
-
-        Text {
-          anchors.left: parent.left
-          anchors.verticalCenter: parent.verticalCenter
-          visible: root.service ? root.service.driverVersion !== "" : false
-          text: "Driver " + (root.service ? root.service.driverVersion : "")
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          textFormat: Text.PlainText
-        }
 
         Row {
           id: footerRow
