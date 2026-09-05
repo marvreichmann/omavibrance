@@ -70,14 +70,46 @@ secondhand descriptions of its CLI:
   `None` on an index with nothing attached.
 - `ATTRIBUTE=vibrance|dithering` and `NVIDIA_GPU=<n>` are read from the
   environment. A non-existent GPU index exits non-zero.
+- `nvibrant` on `PATH` is a Python launcher (~40 ms/call). The binary it execs
+  runs in ~12 ms; `python3 -c "import nvibrant; print(nvibrant.get_best()[1])"`
+  resolves its path. The service does this once and calls the binary directly,
+  falling back to the launcher if the direct call ever exits non-zero.
+
+## Testing the service without a mouse
+
+`Service.qml` imports only `QtQuick`, `Quickshell` and `Quickshell.Io` — no
+`qs.Ui` — so it runs standalone under a plain Quickshell instance. That is how
+the click-driven paths (save/restore, identify, rename) get exercised, since
+nothing here can synthesize a mouse click:
+
+```sh
+mkdir -p /tmp/qstest/omavibrance-test && cd /tmp/qstest
+cp ~/Projects/omavibrance/{Service.qml,Model.js} omavibrance-test/
+# write a harness shell.qml that instantiates Service and calls its functions
+XDG_STATE_HOME=$PWD/state qs -p omavibrance-test/shell.qml
+```
+
+Point `XDG_STATE_HOME` at a scratch directory or the harness will overwrite the
+real state file. Note that the harness drives real hardware: it changes actual
+vibrance, so end it on `resetAll()`.
 
 ## Manual checks
 
-- Panel opens with one slider per `Success` display, labelled `<connector> · <index>`.
-- Dragging a slider updates the readout live and the display within ~60 ms;
-  releasing between throttle ticks still lands the final value.
-- Right-click on a slider neutralizes that display; Reset neutralizes all.
+- Panel opens with one row per `Success` display, named from EDID and ordered
+  left to right by desktop position.
+- The slider track is continuous — no notches — and dragging updates the number
+  field live and the display within ~25 ms; releasing between throttle ticks
+  still lands the final value.
+- Typing in the number field applies on commit; the slider follows.
+- Identify flashes exactly one display six times and leaves it on its stored
+  value. Closing the panel mid-pulse stops it.
+- Rename persists, survives a restart, and an empty name falls back to the EDID
+  label.
+- Save then drift then Restore returns the exact saved values. Restore is
+  disabled until a snapshot exists.
+- Right-click on a slider neutralizes that display; Reset neutralizes all and
+  leaves the snapshot and names intact.
 - Values survive `omarchy-restart-shell` (check
-  `~/.local/state/omarchy/omavibrance.json`).
+  `~/.local/state/omarchy/omavibrance.json`); a version 1 file still loads.
 - With `nvibrant` renamed away, the panel shows the missing-binary warning and
   spawns no processes.

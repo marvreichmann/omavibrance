@@ -41,13 +41,35 @@ Item {
   // (restored before we know the display count) and trimmed once we do.
   property var values: []
 
+  // The snapshot behind Save/Restore. Empty until the user pins one.
+  property var saved: []
+
+  // User-assigned display names, keyed by nvibrant index (as a string, since
+  // that is what survives a JSON round-trip).
+  property var names: ({})
+
+  // Hyprland outputs, used to put a make and model against an index.
+  property var monitors: []
+  property var monitorsByIndex: ({})
+
   property bool nvibrantMissing: false
   property string lastError: ""
   readonly property bool busy: applyProc.running
+  readonly property bool hasSnapshot: saved.length > 0
 
   readonly property var connectedDisplays: {
     var out = []
     for (var i = 0; i < displays.length; i++) if (displays[i].connected) out.push(displays[i])
+    // Left to right across the desk, so the rows read in the order the
+    // monitors physically sit. Unmatched rows sort last, in index order.
+    var map = monitorsByIndex
+    out.sort(function(a, b) {
+      var ma = map[a.index]
+      var mb = map[b.index]
+      var xa = ma ? ma.x : Number.MAX_VALUE
+      var xb = mb ? mb.x : Number.MAX_VALUE
+      return xa !== xb ? xa - xb : a.index - b.index
+    })
     return out
   }
 
@@ -60,6 +82,25 @@ Item {
     return Model.rawToPercent(valueFor(index))
   }
 
+  function monitorFor(index) {
+    return monitorsByIndex[index] || null
+  }
+
+  function nameFor(index) {
+    var n = names[String(index)]
+    return n === undefined || n === null ? "" : String(n)
+  }
+
+  function setName(index, name) {
+    var next = ({})
+    for (var k in names) next[k] = names[k]
+    var trimmed = String(name || "").replace(/^\s+|\s+$/g, "")
+    if (trimmed === "") delete next[String(index)]
+    else next[String(index)] = trimmed
+    names = next
+    saveTimer.restart()
+  }
+
   // --------------------------------------------------------------- applying
 
   // One process at a time. A slider drag would otherwise queue dozens of
@@ -68,6 +109,16 @@ Item {
   // Coalescing to a single pending re-run keeps the newest request authoritative
   // however far behind the process gets.
   property bool applyQueued: false
+
+  // While an identify pulse runs, one index is driven to a value that is not
+  // its stored one. Kept separate from `values` so the slider does not lurch
+  // around and nothing about the pulse gets persisted.
+  property int identifyIndex: -1
+  property int identifyValue: 0
+
+  function effectiveValue(index) {
+    return (identifyIndex === index) ? identifyValue : valueFor(index)
+  }
 
   function apply() {
     if (nvibrantMissing) return
@@ -79,8 +130,8 @@ Item {
     // Before the first successful run we don't know the display count. Passing
     // no arguments enumerates (and sets everything to zero, which is the driver
     // default anyway); afterwards we always send the full array.
-    var args = ["nvibrant"]
-    for (var i = 0; i < displays.length; i++) args.push(String(valueFor(i)))
+    var args = [binaryPath]
+    for (var i = 0; i < displays.length; i++) args.push(String(effectiveValue(i)))
 
     applyProc.command = args
     applyProc.running = true
@@ -111,7 +162,71 @@ Item {
   // so re-sending what we already hold is both the refresh and a no-op write.
   function refresh() {
     apply()
+    readMonitors()
   }
+
+  // ------------------------------------------------------- save and restore
+
+  // Live values are persisted continuously, so nothing is ever lost across a
+  // restart. These two are the explicit layer on top: a snapshot the user pins
+  // deliberately and can come back to after experimenting.
+  function saveSnapshot() {
+    var next = []
+    for (var i = 0; i < displays.length; i++) next.push(valueFor(i))
+    saved = next
+    saveTimer.restart()
+  }
+
+  function restoreSnapshot() {
+    if (saved.length === 0) return
+    values = saved.slice()
+    saveTimer.restart()
+    apply()
+  }
+
+  // ---------------------------------------------------------- identify
+
+  // Swings one display between fully desaturated and fully saturated a few
+  // times. Correlating nvibrant indices with Hyprland outputs is a heuristic,
+  // so this is how the user confirms which physical monitor a row drives.
+  function identify(index) {
+    if (nvibrantMissing) return
+    identifyIndex = index
+    identifyStep = 0
+    identifyTimer.restart()
+    identifyTick()
+  }
+
+  function stopIdentify() {
+    identifyTimer.stop()
+    identifyIndex = -1
+    apply()
+  }
+
+  property int identifyStep: 0
+  readonly property int identifyPulses: 6
+
+  function identifyTick() {
+    if (identifyIndex < 0) return
+    if (identifyStep >= identifyPulses) {
+      stopIdentify()
+      return
+    }
+    // Grayscale then oversaturated: visible on any content, and on any
+    // starting value, unlike a swing relative to the display's own setting.
+    identifyValue = (identifyStep % 2 === 0) ? Model.MIN_RAW : Model.MAX_RAW
+    identifyStep = identifyStep + 1
+    apply()
+  }
+
+  Timer {
+    id: identifyTimer
+    interval: 260
+    repeat: true
+    onTriggered: root.identifyTick()
+  }
+
+  // ------------------------------------------------------------- processes
 
   Process {
     id: applyProc
@@ -128,6 +243,18 @@ Item {
 
     onExited: function(exitCode) {
       if (exitCode !== 0) {
+        // The resolved binary is one of nvibrant's bundled per-driver builds,
+        // reached without its Python launcher. If it will not run — not
+        // executable in this install, wrong driver — fall back to the launcher
+        // once rather than leaving the plugin dead.
+        if (root.usingDirectBinary) {
+          console.warn("omavibrance: direct binary failed, falling back to the nvibrant launcher")
+          root.usingDirectBinary = false
+          root.binaryPath = "nvibrant"
+          root.lastStderr = ""
+          Qt.callLater(root.apply)
+          return
+        }
         root.lastError = root.lastStderr !== ""
           ? root.lastStderr
           : "nvibrant exited with code " + exitCode
@@ -164,9 +291,18 @@ Item {
       next.push(root.values[i] === undefined ? parsed.displays[i].raw : Model.clampRaw(root.values[i]))
     }
     root.values = next
+    root.correlate()
   }
 
   // ------------------------------------------------------- binary detection
+
+  // `nvibrant` on PATH is a Python launcher that picks a bundled binary for the
+  // running driver and execs it. That indirection costs ~28ms of interpreter
+  // startup on every call, which is most of the latency of a slider drag, so
+  // the launcher is asked once for the path and the binary is called directly
+  // from then on.
+  property string binaryPath: "nvibrant"
+  property bool usingDirectBinary: false
 
   Process {
     id: whichProc
@@ -178,9 +314,51 @@ Item {
         console.warn("omavibrance: " + root.lastError)
         return
       }
-      // Only now is it safe to invoke it — apply() is a no-op while the
-      // binary is presumed missing.
+      resolveProc.running = true
+    }
+  }
+
+  Process {
+    id: resolveProc
+    command: ["python3", "-c", "import nvibrant, sys; sys.stdout.write(str(nvibrant.get_best()[1]))"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var path = String(text || "").replace(/^\s+|\s+$/g, "")
+        if (path !== "") {
+          root.binaryPath = path
+          root.usingDirectBinary = true
+        }
+      }
+    }
+    onExited: {
+      // Whatever the outcome, this is the first point at which it is safe to
+      // invoke nvibrant: either directly, or via the launcher on PATH.
+      root.readMonitors()
       root.apply()
+    }
+  }
+
+  // ---------------------------------------------------------- hyprland
+
+  function readMonitors() {
+    if (monitorsProc.running) return
+    monitorsProc.running = true
+  }
+
+  function correlate() {
+    root.monitorsByIndex = Model.correlateMonitors(root.displays, root.monitors)
+  }
+
+  Process {
+    id: monitorsProc
+    command: ["hyprctl", "-j", "monitors"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.monitors = Model.parseMonitors(text)
+        root.correlate()
+      }
     }
   }
 
@@ -191,10 +369,24 @@ Item {
   function loadState(text) {
     try {
       var parsed = JSON.parse(text)
-      if (parsed && Array.isArray(parsed.values)) {
-        var next = []
-        for (var i = 0; i < parsed.values.length; i++) next.push(Model.clampRaw(parsed.values[i]))
-        root.values = next
+      if (parsed) {
+        if (Array.isArray(parsed.values)) {
+          var next = []
+          for (var i = 0; i < parsed.values.length; i++) next.push(Model.clampRaw(parsed.values[i]))
+          root.values = next
+        }
+        // Absent in version 1 files; an empty snapshot simply leaves Restore
+        // disabled until the user pins one.
+        if (Array.isArray(parsed.saved)) {
+          var snap = []
+          for (var j = 0; j < parsed.saved.length; j++) snap.push(Model.clampRaw(parsed.saved[j]))
+          root.saved = snap
+        }
+        if (parsed.names && typeof parsed.names === "object") {
+          var n = ({})
+          for (var k in parsed.names) n[String(k)] = String(parsed.names[k])
+          root.names = n
+        }
       }
     } catch (e) {
       // A corrupt or absent file just means "no preferences yet". Starting
@@ -206,7 +398,12 @@ Item {
 
   function flushState() {
     if (!stateLoaded) return
-    stateFile.setText(JSON.stringify({ version: 1, values: root.values }, null, 2) + "\n")
+    stateFile.setText(JSON.stringify({
+      version: 2,
+      values: root.values,
+      saved: root.saved,
+      names: root.names
+    }, null, 2) + "\n")
   }
 
   FileView {

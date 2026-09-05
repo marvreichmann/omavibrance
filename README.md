@@ -7,12 +7,17 @@ bar, using [`nvibrant`](https://github.com/Tremeschin/nvibrant).
 
 ## Features
 
-- One slider per **connected** display, from -100% (grayscale) to +100% (max
-  saturation), matching how nvidia-settings presents the setting.
-- Displays are labelled by connector and index (`DP · 1`), so a multi-monitor
-  setup stays identifiable.
-- Values are remembered and re-applied when the shell restarts — `nvibrant`
-  itself has no way to read back what is currently set.
+- A continuous slider **and** a numeric field per connected display, from -100%
+  (grayscale) to +100% (max saturation), matching how nvidia-settings presents
+  the setting.
+- Displays are named from their EDID (`Odyssey G7`, `DP-3`, serial) and listed
+  left to right in the order they sit on your desk.
+- **Identify** flashes one display between grayscale and full saturation, so you
+  can tell which row drives which monitor — and **rename** a row to whatever you
+  actually call it.
+- **Save** pins the current values; **Restore** comes back to them after
+  experimenting. Live values are also persisted continuously and re-applied when
+  the shell restarts, since `nvibrant` has no way to read back what is set.
 - Right-click a slider to return that display to neutral; **Reset** neutralizes
   all of them.
 - Warns in the panel if `nvibrant` is missing or an invocation fails.
@@ -43,6 +48,24 @@ Three consequences shape this plugin:
 
 Only the first GPU is controlled. `nvibrant` selects a GPU with the `NVIDIA_GPU`
 environment variable; multi-GPU support is not implemented.
+
+The `nvibrant` on `PATH` is a Python launcher that picks a bundled per-driver
+binary and execs it, costing ~28 ms of interpreter startup per call. The plugin
+asks it once for that path and then invokes the binary directly, which is most
+of what makes dragging a slider feel immediate. If the direct call fails it
+falls back to the launcher.
+
+## How displays are identified
+
+`nvibrant` reports a connector family and a positional index; Hyprland reports
+an output name, make/model/serial, and a desktop position. Nothing in either
+output is a shared key, so the two are correlated by ordering within a connector
+family: the *n*-th connected DP row is matched to the *n*-th `DP-` output.
+
+That holds on ordinary setups but is a heuristic, not a lookup — which is why
+every row has an **identify** pulse to confirm it and a **rename** to override
+it. Custom names are stored in the same state file and survive the mapping
+changing under them.
 
 ## License
 
