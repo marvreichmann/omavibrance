@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "com.github.marv.omavibrance",
+  "name": "Omavibrance",
+  "version": "0.2.0",
+  "author": "Marv",
+  "license": "MIT",
+  "description": "Control digital vibrance for all connected displays using nvibrant.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Omavibrance",
+    "description": "Adjust digital vibrance for displays.",
+    "category": "Display",
+    "aliases": ["vibrance", "saturation", "nvibrant", "color"],
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
