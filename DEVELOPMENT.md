@@ -124,6 +124,15 @@ vibrance, so end it on `resetAll()`.
   reading; clicking it again hides it.
 - The neutral mark must clear the *knob*, not just the track — at exactly 0% the
   knob parks dead centre and a shorter mark vanishes under it.
+- Everything shares one left edge: hero icon, section rule, row glyph, row text
+  and slider track. Two things fight that and both are handled in `Panel.qml`.
+  The cards are shifted out by `rowBleed` and padded back in by the same amount,
+  so their *contents* land on the header's line rather than a card padding
+  further right; the padding is derived from the live border width so a row does
+  not slide sideways when its border changes on hover. And `OpticalGlyph` is an
+  Item with **no implicit size** that centers its text on itself, so a glyph
+  given no width is a zero-wide box with half the mark hanging off its left —
+  every glyph here is sized explicitly, to the shared `iconColumn`.
 - The header switch bypasses: every display goes neutral, stored values and
   slider positions do not move, and turning it back on restores them exactly.
   An identify pulse outranks the bypass.

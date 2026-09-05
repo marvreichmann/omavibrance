@@ -38,6 +38,23 @@ Panel {
   property int editingIndex: -1
   property int numericIndex: -1
 
+  // How far each display card reaches outside the content column. The cards are
+  // shifted out by exactly their own horizontal inset, so what is *inside* them
+  // — the monitor glyph, the name, the slider — starts on the same vertical
+  // line as the hero's icon and title. Without it every row sits one card
+  // padding further right than the header and the panel reads as crooked.
+  readonly property int rowBleed: Style.spacing.rowPaddingX
+
+  // The leading icon column, shared by the hero and every row so their glyphs
+  // and their text both start on the same line. The gap matches the one
+  // PanelHero puts between its own icon and labels, which is fixed at 14.
+  //
+  // OpticalGlyph is an Item with no implicit size that centers its text on
+  // itself, so a glyph given no width is a 0-wide box with half the mark
+  // hanging off the left edge. Both icons below are therefore sized explicitly.
+  readonly property int iconColumn: Style.space(24)
+  readonly property int iconGap: Style.space(14)
+
   // The hero's status line: what the panel is driving right now.
   readonly property string heroMeta: {
     if (!service) return "Service unavailable"
@@ -79,8 +96,11 @@ Panel {
     bar: root.bar
     open: root.opened
     // The hero's icon and title sit right against this inset, so the popup's
-    // default padding left them looking pinned to the edge.
-    padding: Style.spacing.panelPadding
+    // default padding left them looking pinned to the edge. It also has to
+    // leave room for the display cards, which bleed outward by `rowBleed` so
+    // that their contents line up with the header rather than sitting a card
+    // padding further in.
+    padding: Style.space(24)
     contentWidth: card.fittedContentWidth(Style.space(420))
     contentHeight: card.fittedContentHeight(content.implicitHeight)
 
@@ -114,6 +134,8 @@ Panel {
           OpticalGlyph {
             // U+F0301 nf-md-invert_colors, the same mark as the bar widget.
             text: "\udb80\udf01"
+            width: root.iconColumn
+            height: root.iconColumn
             fontSize: Style.font.display
             color: root.foreground
           }
@@ -215,11 +237,21 @@ Panel {
             readonly property bool identifying: root.service ? root.service.identifyIndex === displayIndex : false
             readonly property bool hot: hover.hovered || editing || numeric || identifying
 
-            width: parent.width
+            // Reach out past the content column by the bleed, then pad back in
+            // by the same amount so the row's contents land on the header's
+            // line. The padding is measured off the border rather than fixed,
+            // because the border width can differ between the normal, hover and
+            // selected specs — folding that difference into the padding keeps
+            // the contents from shifting sideways as the row lights up.
+            x: -root.rowBleed
+            width: parent.width + root.rowBleed * 2
             implicitHeight: rowColumn.implicitHeight + contentTopInset + contentBottomInset
             height: implicitHeight
             radius: Style.cornerRadius
-            padding: Style.spacing.rowPaddingX
+            topPadding: Style.spacing.rowPaddingX
+            bottomPadding: Style.spacing.rowPaddingX
+            leftPadding: Math.max(0, root.rowBleed - borderLeft)
+            rightPadding: Math.max(0, root.rowBleed - borderRight)
             // A card that lifts on hover, so three rows read as three objects
             // rather than one wall of text. An identifying row stays lit for as
             // long as its display is flashing.
@@ -266,7 +298,7 @@ Panel {
                   id: rowIcon
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
-                  width: Style.font.icon
+                  width: root.iconColumn
                   height: Style.font.icon
                   // U+F0379 nf-md-monitor
                   text: "\udb80\udf79"
@@ -278,7 +310,7 @@ Panel {
                 Item {
                   id: nameStack
                   anchors.left: rowIcon.right
-                  anchors.leftMargin: Style.spacing.lg
+                  anchors.leftMargin: root.iconGap
                   anchors.right: valueStack.left
                   anchors.rightMargin: Style.spacing.controlGap
                   anchors.verticalCenter: parent.verticalCenter
@@ -381,7 +413,7 @@ Panel {
                 Text {
                   id: detailText
                   anchors.left: parent.left
-                  anchors.leftMargin: rowIcon.width + Style.spacing.lg
+                  anchors.leftMargin: rowIcon.width + root.iconGap
                   anchors.right: rowActions.left
                   anchors.rightMargin: Style.spacing.sm
                   anchors.verticalCenter: parent.verticalCenter
