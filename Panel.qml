@@ -41,6 +41,36 @@ Panel {
   // Whether the install instructions under the missing-binary warning are open.
   property bool helpOpen: false
 
+  // ------------------------------------------------------------ keyboard
+  //
+  // Which row the keyboard is aimed at, as a position in `displays`. Hovering a
+  // row moves it there too, so the arrows always act on the row under the
+  // cursor without the user having to think about which input owns the panel.
+  property int cursorRow: 0
+
+  // Arrow steps are coarser than the wheel's 1%: crossing the full -100..100
+  // range a percent at a time would take two hundred presses. The slider and
+  // the numeric field remain the way to land on an exact value.
+  readonly property int keyStep: 5
+
+  function moveCursor(delta) {
+    var n = displays.length
+    if (n === 0) return
+    cursorRow = ((cursorRow + delta) % n + n) % n
+  }
+
+  function cursorDisplay() {
+    var n = displays.length
+    if (n === 0) return null
+    return displays[Math.max(0, Math.min(n - 1, cursorRow))]
+  }
+
+  function nudgeCursorValue(deltaPercent) {
+    var d = cursorDisplay()
+    if (!d || !service) return
+    service.setVibrancePercent(d.index, service.percentFor(d.index) + deltaPercent)
+  }
+
   // The card's inner padding, and therefore the amount the header and footer
   // are inset by so that *their* contents share the rows' left edge.
   //
@@ -82,12 +112,13 @@ Panel {
       if (service && service.identifyIndex >= 0) service.stopIdentify()
       return
     }
+    cursorRow = 0
     // Re-reading on open is cheap (one process) and catches vibrance or a
     // monitor layout changed by anything else since the panel was last shown.
     if (service) service.refresh()
-    // The catcher only sees keys once it holds focus, and the popup window
-    // does not exist yet on the frame `opened` flips.
-    Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
+    // Focus is the panel's own job now: KeyboardPanel primes the surface for
+    // keyboard input and then hands active focus to its `focusTarget`, which
+    // has to wait for the surface to map rather than for `opened` to flip.
   }
 
   function applyPercent(index, percent) {
@@ -95,12 +126,18 @@ Panel {
     service.setVibrancePercent(index, Math.round(percent))
   }
 
-  PopupCard {
+  // KeyboardPanel, not PopupCard. PopupCard is an xdg-popup, which only ever
+  // receives keys once a click or hover has routed focus through its parent
+  // surface — arrow keys simply went nowhere. KeyboardPanel is the layer-shell
+  // equivalent with the same API plus a keyboard-focus prime, and `focusTarget`
+  // hands active focus to the key catcher once the surface has mapped.
+  KeyboardPanel {
     id: card
     anchorItem: root.anchorItem
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
+    focusTarget: keyCatcher
     // One margin on every side. The card borders, the hero's toggle and the
     // footer buttons all sit on the content column's edge, so this is equally
     // the gap to the right of the buttons and the gap below them.
@@ -115,7 +152,24 @@ Panel {
       // the Escape that dismisses it.
       blocked: root.editingIndex >= 0 || root.numericIndex >= 0
       onCloseRequested: root.close()
-      onTabRequested: function(direction) { root.switchPanel(direction) }
+      // Tab walks the displays rather than jumping to the neighbouring bar
+      // popup. With at most a handful of rows, cycling within the panel is the
+      // more useful thing for the key to do.
+      onTabRequested: function(direction) { root.moveCursor(direction) }
+      // Left/right adjust the row the cursor is on; up/down walk between rows,
+      // the same as Tab. The catcher maps h/j/k/l onto these too.
+      onMoveRequested: function(dx, dy) {
+        if (dx !== 0) root.nudgeCursorValue(dx * root.keyStep)
+        else if (dy !== 0) root.moveCursor(dy)
+      }
+      // Enter flashes the display the cursor is on, so a keyboard user can
+      // still answer "which monitor is this row?".
+      onReturnRequested: {
+        var d = root.cursorDisplay()
+        if (!d || !root.service) return
+        if (root.service.identifyIndex === d.index) root.service.stopIdentify()
+        else root.service.identify(d.index)
+      }
     }
 
     Column {
@@ -301,14 +355,16 @@ Panel {
           delegate: BorderSurface {
             id: rowCard
             required property var modelData
+            required property int index
 
+            readonly property bool cursored: root.cursorRow === index
             readonly property int displayIndex: modelData.index
             readonly property var monitor: root.service ? root.service.monitorFor(displayIndex) : null
             readonly property string customName: root.service ? root.service.nameFor(displayIndex) : ""
             readonly property bool editing: root.editingIndex === displayIndex
             readonly property bool numeric: root.numericIndex === displayIndex
             readonly property bool identifying: root.service ? root.service.identifyIndex === displayIndex : false
-            readonly property bool hot: hover.hovered || editing || numeric || identifying
+            readonly property bool hot: hover.hovered || cursored || editing || numeric || identifying
 
             width: parent.width
             implicitHeight: rowColumn.implicitHeight + contentTopInset + contentBottomInset
@@ -336,7 +392,12 @@ Panel {
               ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
             }
 
-            HoverHandler { id: hover }
+            // Pointing at a row aims the keyboard at it as well, so the arrows
+            // act on whatever is under the cursor without a separate step.
+            HoverHandler {
+              id: hover
+              onHoveredChanged: if (hovered) root.cursorRow = rowCard.index
+            }
 
             // Dragging a slider fires on every pixel of movement. Each apply is
             // a process spawn, so the drag is rate-limited here and the final
@@ -595,7 +656,12 @@ Panel {
                 Rectangle {
                   anchors.centerIn: parent
                   width: Math.max(1, Style.space(2))
-                  height: slider.knobSize + Style.space(12)
+                  // Half the protrusion it used to have. Sizing it by the knob
+                  // rather than halving the whole mark keeps it visible at
+                  // exactly 0%, where the knob parks on top of it — a mark
+                  // shorter than the knob would disappear precisely when the
+                  // slider is sitting on the value it marks.
+                  height: slider.knobSize + Style.space(6)
                   radius: width / 2
                   color: root.dim
                 }

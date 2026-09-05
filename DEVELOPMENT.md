@@ -49,10 +49,17 @@ Worth knowing, because guessing at them is how the first version broke:
   and positions that panel itself and injects `service` into it directly. This
   plugin does not use it; its panel is nested inside the bar widget, which is
   what every other panel-bearing plugin does.
-- Base components come from `qs.Ui` (`BarWidget`, `Panel`, `PopupCard`,
+- Base components come from `qs.Ui` (`BarWidget`, `Panel`, `KeyboardPanel`,
   `PanelSlider`, `PanelKeyCatcher`, `Button`, …) and tokens from `qs.Commons`
   (`Style`, `Color`). Read `/usr/share/omarchy/shell/Ui/` before inventing a
   control.
+- **A panel that wants keys must be a `KeyboardPanel`, not a `PopupCard`.**
+  PopupCard is an xdg-popup, which only receives keys once a click or hover has
+  routed focus through its parent surface; KeyboardPanel is the layer-shell
+  equivalent with the same API plus a keyboard-focus prime. Set its
+  `focusTarget` to the `PanelKeyCatcher` — the surface has to map before
+  anything inside it can take active focus, so doing it yourself on `opened` is
+  too early.
 - The panel's look is the house style, not a bespoke design. `PanelHero` gives
   the icon + title + small-caps status header, with the bypass switch in its
   `trailingControl` slot; row cards are `BorderSurface` tinted
@@ -126,7 +133,7 @@ vibrance, so end it on `resetAll()`.
   knob parks dead centre and a shorter mark vanishes under it.
 - The panel has two vertical rules, and both matter. The **outer** one is the
   content column's edge: card borders, the hero's toggle and the footer buttons
-  all sit on it, one `PopupCard.padding` in from the frame — which is also the
+  all sit on it, one `KeyboardPanel.padding` in from the frame — which is also the
   gap below the buttons, so the margin reads the same on every side. The
   **inner** one is `rowInset` further in: the card's own padding, and what the
   hero and the status texts are shifted by so their contents line up with the
@@ -145,6 +152,12 @@ vibrance, so end it on `resetAll()`.
   disabled until a snapshot exists.
 - Right-click on a slider neutralizes that display; Reset neutralizes all and
   leaves the snapshot and names intact.
+- Tab and up/down walk the display cards in the order they are shown (wrapping
+  at the ends), left/right move the cursored row by 5%, Enter flashes it and
+  Escape closes the panel. Hovering a card moves the keyboard cursor to it.
+  `wtype -k Right` and friends drive all of this from a script — it is the one
+  input this environment can synthesize, so use it rather than reasoning about
+  the key handling.
 - Values survive `omarchy-restart-shell` (check
   `~/.local/state/omarchy/omavibrance.json`); a version 1 file still loads.
 - With `nvibrant` renamed away, the panel shows the missing-binary warning and

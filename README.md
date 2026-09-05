@@ -23,6 +23,9 @@ bar, using [`nvibrant`](https://github.com/Tremeschin/nvibrant).
 - **Save** pins the current values; **Restore** comes back to them after
   experimenting. Live values are also persisted continuously and re-applied when
   the shell restarts, since `nvibrant` has no way to read back what is set.
+- Fully keyboard driven: **Tab** (or up/down) walks the displays, **left/right**
+  adjust the one the cursor is on in 5% steps, **Enter** flashes it, **Escape**
+  closes. Pointing at a row aims the keyboard at it too.
 - Right-click a slider to return that display to neutral; **Reset** neutralizes
   all of them.
 - Warns in the panel if `nvibrant` is missing or an invocation fails; the
