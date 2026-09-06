@@ -85,6 +85,11 @@ every row has an **identify** pulse to confirm it and a **rename** to override
 it. Custom names are stored in the same state file and survive the mapping
 changing under them.
 
+## Changelog
+
+Every release is listed in [CHANGELOG.md](CHANGELOG.md) and published as a
+[GitHub release](https://github.com/marvreichmann/omavibrance/releases).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

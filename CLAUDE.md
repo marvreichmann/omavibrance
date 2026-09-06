@@ -7,9 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 An Omarchy shell plugin (QML / Quickshell) that controls NVIDIA digital vibrance
 per display by driving the external `nvibrant` binary. There is no build step —
 the plugin is the four source files at the repository root plus `manifest.json`.
-`README.md` documents the user-facing behaviour. `tests/` holds unit tests for
-`Model.js` and ships with nothing (the install copies named files); everything
-in the QML files is still verified by hand, per the test loop below.
+`README.md` documents the user-facing behaviour and `CHANGELOG.md` the release
+history. `tests/` holds unit tests for `Model.js` and ships with nothing (the
+install copies named files); everything in the QML files is still verified by
+hand, per the test loop below.
 
 Develop in this repository, never in the installed copy.
 
@@ -224,3 +225,23 @@ so verify those by hand:
   published plugin ships a preview and the store optimizes it automatically. No
   fixed dimensions; existing ones run from 960x540 to 2560x1600.
 - `homepage` pointing at the public repository.
+
+## Releasing
+
+Each version is a GitHub release, and its notes are the matching `CHANGELOG.md`
+section — the file is the source, the release is a copy of it. To cut one:
+
+1. Add the changes under `## [Unreleased]` in `CHANGELOG.md` as you go, in
+   Keep a Changelog form (`### Added` / `### Changed` / `### Fixed`), written
+   for someone using the plugin rather than reading the diff.
+2. Rename that heading to `## [x.y.z] - YYYY-MM-DD`, add a fresh empty
+   `## [Unreleased]`, and update the link definitions at the bottom.
+3. Bump `version` in `manifest.json` to the same `x.y.z`. The workflow refuses
+   the tag if the two disagree.
+4. Commit, then `git tag vx.y.z && git push origin main --follow-tags`.
+
+`.github/workflows/release.yml` does the rest on the tag: runs
+`node --test tests/`, checks the tag against the manifest, extracts the section
+for that version, and fails rather than publishing an empty release if there is
+no section. Do not write release notes in the GitHub UI — the next tag would
+contradict them.
