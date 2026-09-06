@@ -85,6 +85,13 @@ Four files, one direction of data flow:
 - `nvibrant` has no read-back. Enumerating displays *is* a write, so the service
   persists values to `$XDG_STATE_HOME/omarchy/omavibrance.json` (currently
   version 2; version 1 files must keep loading) and re-applies at startup.
+- The first invocation of a session runs before the display count is known, so
+  it sends no arguments — which sets every display to `0`. The restored values
+  are therefore not on the hardware until `consumeOutput` compares the echoed
+  table against `effectiveValue` and queues a second run. Drop that comparison
+  and vibrance silently flattens on every shell reload, coming back only when
+  the panel is opened and `refresh()` applies. It terminates because the re-run
+  sends exactly the values the next table echoes back.
 - Every invocation sends the **whole** array, including positional placeholders
   for disconnected indices. `displays` therefore keeps disconnected rows; the
   panel filters them, the service must not.
