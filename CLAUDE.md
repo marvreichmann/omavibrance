@@ -5,9 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Omarchy shell plugin (QML / Quickshell) that controls NVIDIA digital vibrance
-per display by driving the external `nvibrant` binary. There is no build step
-and no test framework — the plugin is the four source files at the repository
-root plus `manifest.json`. `README.md` documents the user-facing behaviour.
+per display by driving the external `nvibrant` binary. There is no build step —
+the plugin is the four source files at the repository root plus `manifest.json`.
+`README.md` documents the user-facing behaviour. `tests/` holds unit tests for
+`Model.js` and ships with nothing (the install copies named files); everything
+in the QML files is still verified by hand, per the test loop below.
 
 Develop in this repository, never in the installed copy.
 
@@ -17,9 +19,29 @@ consult <https://plugins.omarchy.org/develop.html> rather than guessing. The
 notes below record what this plugin actually depends on; that page is the
 authority.
 
+## Tests
+
+`Model.js` is covered by unit tests, run with Node's built-in runner — no
+dependencies, nothing to install:
+
+```sh
+node --test tests/
+```
+
+`tests/model.js` evaluates `Model.js` (minus its `.pragma library` line) in the
+host realm and returns its top-level declarations, so a new pure function is
+testable without an export list — and without the cross-realm prototypes that
+make every `deepEqual` fail while printing two identical-looking values.
+
+This is why `Model.js` exists: a decision moved there becomes checkable in
+milliseconds, against captured real `nvibrant` output, instead of by restarting
+the shell and looking at a monitor. Prefer extracting to it over testing through
+QML. Nothing below `Model.js` — processes, timers, panel state — has automated
+coverage, so changes there still go through the loop that follows.
+
 ## Test loop
 
-Testing requires copying everything to the installed location, whose folder name
+Testing the QML requires copying everything to the installed location, whose folder name
 must match `manifest.json`'s `id`:
 
 ```sh

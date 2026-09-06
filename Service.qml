@@ -299,33 +299,22 @@ Item {
     root.driverVersion = parsed.driver
     root.displays = parsed.displays
 
-    // First run, or the display count changed (monitor hotplug). Trust the
-    // table for indices we have no stored preference for, and drop stored
-    // values for indices that no longer exist.
-    var next = []
-    for (var i = 0; i < parsed.displays.length; i++) {
-      next.push(root.values[i] === undefined ? parsed.displays[i].raw : Model.clampRaw(root.values[i]))
-    }
-    root.values = next
+    // Both halves of the reconcile live in Model.js so they can be tested
+    // without a shell: what to hold after this invocation, and whether it is
+    // already on the hardware.
+    root.values = Model.reconcileValues(parsed.displays, root.values)
     root.correlate()
 
-    // The first invocation of a session is the enumeration one: it runs before
-    // the display count is known, so it sends no arguments and nvibrant defaults
-    // every index to 0. The values we just restored from disk are therefore not
-    // on the hardware yet — the table above is the proof of what actually is.
-    // Re-apply whenever the two disagree, which is also what re-syncs the
-    // displays after a hotplug or after something else moved vibrance.
-    //
-    // This terminates: the re-run sends exactly these values, so the table it
-    // prints matches and the next pass finds no mismatch. Routing it through
-    // `applyQueued` reuses the one-process-at-a-time coalescing rather than
-    // spawning a second nvibrant on top of the one still exiting.
-    for (var j = 0; j < parsed.displays.length; j++) {
-      if (parsed.displays[j].raw !== root.effectiveValue(j)) {
-        root.applyQueued = true
-        break
-      }
-    }
+    // The first invocation of a session runs before the display count is
+    // known, so it sends no arguments and nvibrant defaults every index to 0 —
+    // the values just restored from disk are not on the hardware yet. Routing
+    // the re-run through `applyQueued` reuses the one-process-at-a-time
+    // coalescing rather than spawning a second nvibrant on top of the one
+    // still exiting. It terminates: the re-run sends exactly these values, so
+    // the table it prints matches and the next pass finds no mismatch.
+    var effective = []
+    for (var j = 0; j < parsed.displays.length; j++) effective.push(root.effectiveValue(j))
+    if (Model.needsReapply(parsed.displays, effective)) root.applyQueued = true
   }
 
   // ------------------------------------------------------- binary detection

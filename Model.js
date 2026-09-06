@@ -83,6 +83,42 @@ function parseOutput(text) {
   return result
 }
 
+// ------------------------------------------------------------- reconciling
+//
+// What to hold after an invocation. The echoed table is authoritative about
+// which indices exist; our stored values are authoritative about what the user
+// wants on them. So: keep a stored value wherever we have one, adopt the
+// table's for an index we have never seen, and drop anything past the end of
+// the table (a monitor that has gone away).
+function reconcileValues(parsedDisplays, storedValues) {
+  var out = []
+  var stored = storedValues || []
+  for (var i = 0; i < parsedDisplays.length; i++) {
+    out.push(stored[i] === undefined ? clampRaw(parsedDisplays[i].raw) : clampRaw(stored[i]))
+  }
+  return out
+}
+
+// Whether the values we hold still need to be pushed to the hardware.
+//
+// nvibrant echoes the argument it was given for every index, connected or not,
+// so the table is a faithful record of what the last invocation set. The first
+// invocation of a session is made before the display count is known: it passes
+// no arguments, and nvibrant defaults every index to 0. Comparing the two is
+// therefore what catches a session start — and equally a hotplug, or vibrance
+// moved by something outside this plugin.
+//
+// The comparison is against the *effective* values (bypass and identify
+// applied), not the stored ones, or a bypassed session would re-apply forever.
+function needsReapply(parsedDisplays, effectiveValues) {
+  var effective = effectiveValues || []
+  for (var i = 0; i < parsedDisplays.length; i++) {
+    var want = effective[i] === undefined ? 0 : effective[i]
+    if (parsedDisplays[i].raw !== want) return true
+  }
+  return false
+}
+
 // ---------------------------------------------------------------- monitors
 //
 // nvibrant reports a connector family and a positional index; Hyprland reports
