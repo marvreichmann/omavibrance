@@ -16,10 +16,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Run the unit tests
-        run: node --test tests/
+        # Shell-expanded rather than `node --test tests/`: passing the directory
+        # needs a newer Node than the runner's, and it reads as a module path.
+        run: node --test tests/*.test.js
 
       - name: Check the tag against manifest.json
         run: |
